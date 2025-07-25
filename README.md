@@ -11,6 +11,10 @@ This project is a smart Embedded + IoT system designed to monitor soil moisture 
 5. HTML/CSS/JavaScript – For frontend development
 6. Firebase SDK – For real-time data syncing
 
+--Schreenshots
+<img width="1892" height="885" alt="image" src="https://github.com/user-attachments/assets/cdda04c3-873b-4a69-bd92-6d89320186db" />
+
+
 🛠️ Features
 
 📡 Real-time soil moisture monitoring
