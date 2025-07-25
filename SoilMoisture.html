@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soil Moisture Dashboard</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #3498db;
+            --danger: #e74c3c;
+            --success: #27ae60;
+            --dark: #2c3e50;
+            --light: #ecf0f1;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .header h1 {
+            color: var(--dark);
+            margin: 0;
+        }
+        
+        .cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .card h2 {
+            margin-top: 0;
+            color: var(--primary);
+            font-size: 1.2rem;
+        }
+        
+        .value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .status.dry { background-color: var(--success); }
+        .status.normal { background-color: var(--primary); }
+        .status.wet { background-color: var(--danger); }
+        
+        .led-indicator {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin: 10px auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        .led-dry { background-color: var(--success); }
+        .led-normal { background-color: var(--primary); }
+        .led-wet { background-color: var(--danger); }
+        
+        .chart-container, .data-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-success { background-color: var(--success); color: white; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: var(--light);
+            font-weight: bold;
+        }
+        
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        @media (max-width: 768px) {
+            .cards {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-leaf"></i> Soil Moisture Dashboard</h1>
+            <button class="btn btn-primary" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+
+        <div class="cards">
+            <div class="card">
+                <h2>Current Moisture</h2>
+                <div class="value" id="moisture-value">--</div>
+                <div class="status" id="moisture-status">--</div>
+            </div>
+
+            <div class="card">
+                <h2>LED Status</h2>
+                <div class="led-indicator" id="led-indicator"></div>
+                <div id="led-status-text">Waiting for data...</div>
+            </div>
+
+            <div class="card">
+                <h2>Export Data</h2>
+                <div style="margin-top: 15px;">
+                    <button class="btn btn-success" onclick="exportData('json')">
+                        <i class="fas fa-file-code"></i> JSON
+                    </button>
+                    <button class="btn btn-primary" onclick="exportData('csv')">
+                        <i class="fas fa-file-csv"></i> CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2>Moisture History</h2>
+            <canvas id="moisture-chart"></canvas>
+        </div>
+
+        <div class="data-container">
+            <h2>Recent Readings</h2>
+            <table id="data-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Value</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="data-body">
+                    <!-- Data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyASR6WR6r99Q9F7QqkddEzyjin5VneFZCM",
+            authDomain: "cloud-ledcontrol.firebaseapp.com",
+            databaseURL: "https://cloud-ledcontrol-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "cloud-ledcontrol",
+            storageBucket: "cloud-ledcontrol.appspot.com",
+            messagingSenderId: "599854081067",
+            appId: "1:599854081067:web:76024bed255e467259766e",
+            measurementId: "G-MV5WDSL7D5"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Chart and data variables
+        let moistureChart;
+        let historyData = [];
+        const maxHistoryItems = 20;
+
+        // Initialize the dashboard when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeChart();
+            setupRealtimeUpdates();
+        });
+
+        function initializeChart() {
+            const ctx = document.getElementById('moisture-chart').getContext('2d');
+            moistureChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Soil Moisture',
+                        data: [],
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            suggestedMin: 200,
+                            suggestedMax: 1000,
+                            title: {
+                                display: true,
+                                text: 'Moisture Value'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function setupRealtimeUpdates() {
+            // Current data
+            database.ref('moisture').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    // Update current values
+                    document.getElementById('moisture-value').textContent = data.value;
+                    
+                    // Update status
+                    const statusElement = document.getElementById('moisture-status');
+                    statusElement.textContent = data.status;
+                    statusElement.className = 'status ' + data.status;
+                    
+                    // Update LED indicator
+                    const ledIndicator = document.getElementById('led-indicator');
+                    ledIndicator.className = 'led-indicator led-' + data.status;
+                    document.getElementById('led-status-text').textContent = `LED is ${data.status.toUpperCase()}`;
+                    
+                    // Add to history
+                    const timestamp = new Date();
+                    const newEntry = {
+                        timestamp: timestamp.toLocaleTimeString(),
+                        value: data.value,
+                        status: data.status
+                    };
+                    
+                    historyData.unshift(newEntry);
+                    if (historyData.length > maxHistoryItems) {
+                        historyData.pop();
+                    }
+                    
+                    // Update table
+                    updateTable();
+                    
+                    // Update chart
+                    updateChart();
+                }
+            });
+        }
+
+        function updateTable() {
+            const tableBody = document.getElementById('data-body');
+            tableBody.innerHTML = '';
+            
+            historyData.forEach(entry => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${entry.timestamp}</td>
+                    <td>${entry.value}</td>
+                    <td><span class="status ${entry.status}">${entry.status}</span></td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function updateChart() {
+            // Prepare chart data (last 20 points)
+            const chartData = historyData.slice(0, 20).reverse();
+            
+            moistureChart.data.labels = chartData.map(entry => entry.timestamp);
+            moistureChart.data.datasets[0].data = chartData.map(entry => entry.value);
+            moistureChart.update();
+        }
+
+        function refreshData() {
+            // Force a reload of data
+            database.ref('moisture').once('value').then(snapshot => {
+                const data = snapshot.val();
+                if (data) {
+                    document.getElementById('moisture-value').textContent = data.value;
+                    const statusElement = document.getElementById('moisture-status');
+                    statusElement.textContent = data.status;
+                    statusElement.className = 'status ' + data.status;
+                }
+            });
+        }
+
+        function exportData(format) {
+            if (historyData.length === 0) {
+                alert('No data to export!');
+                return;
+            }
+            
+            const exportData = historyData.map(entry => ({
+                Timestamp: entry.timestamp,
+                Value: entry.value,
+                Status: entry.status
+            }));
+            
+            const dateStr = new Date().toISOString().slice(0, 10);
+            const filename = `soil-moisture-data-${dateStr}`;
+            
+            switch (format) {
+                case 'json':
+                    const jsonStr = JSON.stringify(exportData, null, 2);
+                    const blobJson = new Blob([jsonStr], { type: 'application/json' });
+                    saveAs(blobJson, `${filename}.json`);
+                    break;
+                    
+                case 'csv':
+                    let csvStr = 'Timestamp,Value,Status\n';
+                    exportData.forEach(row => {
+                        csvStr += `"${row.Timestamp}",${row.Value},${row.Status}\n`;
+                    });
+                    const blobCsv = new Blob([csvStr], { type: 'text/csv' });
+                    saveAs(blobCsv, `${filename}.csv`);
+                    break;
+            }
+        }
+
+        // Make functions available globally
+        window.refreshData = refreshData;
+        window.exportData = exportData;
+    </script>
+</body>
+</html>
